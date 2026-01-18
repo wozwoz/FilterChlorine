@@ -1,0 +1,147 @@
+# Home Assistant Package for filterchlorineƒ Device
+# Place this file in: config/packages/filterchlorine_device.yaml
+# Make sure packages are enabled in configuration.yaml:
+# homeassistant:
+#   packages: !include_dir_named packages 
+
+mqtt:
+  sensor:
+    # All sensors reading from the same JSON topic: filterchlorine/sensors
+    - name: "filterchlorine resistance"
+      unique_id: "filter_chlorine_resistance_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "Ω"
+      value_template: "{{ value_json.resistance }}"
+      icon: "mdi:omega"
+      
+    - name: "filterchlorine current"
+      unique_id: "filter_chlorine_current_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "A"
+      device_class: "current"
+      value_template: "{{ value_json.current }}"
+      icon: "mdi:current-ac"
+      
+    - name: "filterchlorine WiFi Signal"
+      unique_id: "filter_chlorine_rssi_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "dBm"
+      device_class: "signal_strength"
+      value_template: "{{ value_json.rssi }}"
+      icon: "mdi:wifi"
+      
+    - name: "filterchlorine bus voltage"
+      unique_id: "filter_chlorine_busvoltage_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      value_template: "{{ value_json.busvoltage }}"
+      icon: "mdi:flash"
+      
+    - name: "filterchlorine shunt voltage"
+      unique_id: "filter_chlorine_shuntvoltage_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      value_template: "{{ value_json.shuntvoltage }}"
+      icon: "mdi:flash"
+      
+    - name: "filterchlorine load voltage"
+      unique_id: "filter_chlorine_loadvoltage_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      value_template: "{{ value_json.loadvoltage }}"
+      icon: "mdi:flash"
+      
+    - name: "filterchlorine power"
+      unique_id: "filter_chlorine_power_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "mW"
+      device_class: "power"
+      value_template: "{{ value_json.power_mW }}"
+      icon: "mdi:power"
+      
+    - name: "filterchlorine Uptime"
+      unique_id: "filter_chlorine_uptime_001"
+      state_topic: "filterchlorine/sensors"
+      unit_of_measurement: "s"
+      value_template: "{{ value_json.uptime }}"
+      icon: "mdi:timer-outline"
+      
+      
+
+      #"\"busvoltage\":%.2f,\"shuntvoltage\":%.2f,\"loadvoltage\":%.2f,\"power_mW\":%.2f}",
+  
+      
+      
+  binary_sensor:
+    - name: "filterchlorine Down"
+      unique_id: "filter_chlorine_down_001"
+      state_topic: "filterchlorine/sensors"
+      value_template: "{{ value_json.down | int > 0 }}"
+      payload_on: true
+      payload_off: false
+      device_class: "problem"
+      icon: "mdi:arrow-collapse-down"
+      
+    - name: "filterchlorine Connected"
+      state_topic: "filterchlorine/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: "connectivity"
+      
+  switch:
+    - name: "filterchlorine OTA Update"
+      state_topic: "filterchlorine/ota/state"
+      command_topic: "beacon"
+      payload_on: "UPDATE"
+      payload_off: "IDLE"
+      state_on: "updating"
+      state_off: "ready"
+      icon: "mdi:upload"
+
+# Input text for custom messages to filterchlorine
+input_text:
+  filterchlorine_message:
+    name: filterchlorine Custom Message
+    initial: ""
+    max: 100
+
+# Automation to send custom messages
+automation:
+  - id: filterchlorine_send_message
+    alias: "filterchlorine - Send Custom Message"
+    trigger:
+      - platform: state
+        entity_id: input_text.filterchlorine_message
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state | length > 0 }}"
+    action:
+      - service: mqtt.publish
+        data:
+          topic: "beacon"
+          payload: "{{ states('input_text.filterchlorine_message') }}"
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.filterchlorine_message
+        data:
+          value: ""
+
+  - id: filterchlorine_ota_trigger
+    alias: "filterchlorine - Trigger OTA Update"
+    trigger:
+      - platform: state
+        entity_id: switch.filterchlorine_ota_update
+        to: "on"
+    action:
+      - service: mqtt.publish
+        data:
+          topic: "beacon"
+          payload: "OTA_UPDATE"
+      - delay:
+          seconds: 2
+      - service: switch.turn_off
+        target:
+          entity_id: switch.filterchlorine_ota_update

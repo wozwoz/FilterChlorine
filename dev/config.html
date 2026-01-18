@@ -1,0 +1,56 @@
+
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            * {
+                box-sizing: border-box;
+                font-family: arial;
+            }
+            #container {
+                width: 300px;
+                margin: 0 auto;
+                text-align: center;
+            }
+            h1 {
+                font-size: 24px;
+                margin: 8vh auto 4vh;
+            }
+            div {
+                width: 220px;
+                margin: 14px auto 2px;
+                text-align: left;
+            }            
+            input {
+                width: 220px;
+                padding: 5px 10px;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+            }
+            input[type="submit"] {
+                width: 80px;
+                margin-top: 30px;
+                border-radius: 6px;
+                background-color: #ddd;
+                font-size: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container">
+            <h1>Device Provisioning</h1>
+            <form action="/save">
+                
+                <div>SSID:</div>
+                <input maxlength="32" type="text" id="ssid" name="ssid" required placeholder="Enter WiFI SSID"><br>
+                
+                <div>PASS:</div>
+                <input maxlength="32" type="text" id="pass" name="pass" required placeholder="Enter WiFI Password"><br>
+
+                <input type="submit" value="Save">
+            </form>
+        </div>
+    </body>
+</html>
