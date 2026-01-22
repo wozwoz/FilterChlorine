@@ -1,0 +1,110 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Git: Add, Commit & Push",
+            "type": "shell",
+            "command": "git add . && git commit -m \"${input:commitMessage}\" && git push",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Git: Quick Push",
+            "type": "shell",
+            "command": "git add . && git commit -m \"Update $(date '+%Y-%m-%d %H:%M')\" && git push",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Git: Add All",
+            "type": "shell",
+            "command": "git add .",
+            "problemMatcher": []
+        },
+        {
+            "label": "Git: Commit",
+            "type": "shell",
+            "command": "git commit -m \"${input:commitMessage}\"",
+            "problemMatcher": []
+        },
+        {
+            "label": "Git: Push",
+            "type": "shell",
+            "command": "git push",
+            "problemMatcher": []
+        },
+        {
+            "label": "Git: Pull",
+            "type": "shell",
+            "command": "git pull",
+            "problemMatcher": []
+        },
+        {
+            "label": "Git: Status",
+            "type": "shell",
+            "command": "git status",
+            "problemMatcher": []
+        },
+        {
+            "label": "PlatformIO: OTA Upload",
+            "type": "shell",
+            "command": "pio run --target upload --upload-port ${input:deviceIP}",
+            "problemMatcher": [
+                "$platformio"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "PlatformIO: Build",
+            "type": "shell",
+            "command": "pio run",
+            "problemMatcher": [
+                "$platformio"
+            ]
+        },
+        {
+            "label": "PlatformIO: Upload (USB)",
+            "type": "shell",
+            "command": "pio run --target upload",
+            "problemMatcher": [
+                "$platformio"
+            ]
+        },
+        {
+            "label": "PlatformIO: Clean",
+            "type": "shell",
+            "command": "pio run --target clean",
+            "problemMatcher": []
+        },
+        {
+            "label": "PlatformIO: Monitor",
+            "type": "shell",
+            "command": "pio device monitor",
+            "problemMatcher": [],
+            "isBackground": true
+        }
+    ],
+    "inputs": [
+        {
+            "id": "commitMessage",
+            "type": "promptString",
+            "description": "Enter commit message",
+            "default": "Update files"
+        },
+        {
+            "id": "deviceIP",
+            "type": "promptString",
+            "description": "Enter ESP32 device IP address",
+            "default": "192.168.1.100"
+        }
+    ]
+}

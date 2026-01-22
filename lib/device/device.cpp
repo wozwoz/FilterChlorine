@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <Adafruit_INA219.h>
+#include <ArduinoJson.h>
 #include "device.h"
 
 #include "../telnet/telnet.h"
@@ -46,11 +47,20 @@ void Device::loop()
 
     update_power(); // Read power data from INA219
 
-    // Build JSON payload
+    // Build JSON payload using ArduinoJson
+    JsonDocument doc;
+    doc["resistance"] = _resistance;
+    doc["current"] = _current_mA;
+    doc["rssi"] = rssi;
+    doc["uptime"] = millis() / 1000;
+    doc["down"] = IsDown() ? "offline" : "online";
+    doc["busvoltage"] = _busvoltage;
+    doc["shuntvoltage"] = _shuntvoltage;
+    doc["loadvoltage"] = _loadvoltage;
+    doc["power_mW"] = _power_mW;
+
     char jsonBuffer[256];
-    snprintf(jsonBuffer, sizeof(jsonBuffer),
-             "{\"resistance\":%.2f,\"current\":%.2f,\"rssi\":%d,\"uptime\":%lu,\"down\":%d,\"busvoltage\":%.2f,\"shuntvoltage\":%.2f,\"loadvoltage\":%.2f,\"power_mW\":%.2f}",
-             _resistance, _current_mA, rssi, millis() / 1000, _Down,_busvoltage,_shuntvoltage,_loadvoltage,_power_mW);
+    serializeJson(doc, jsonBuffer);
 
     // Publish JSON to single topic
     mqtt.publish("filterchlorine/sensors", jsonBuffer);
