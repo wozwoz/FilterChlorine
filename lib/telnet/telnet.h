@@ -9,11 +9,16 @@ class Telnet {
 
         void setup();
         void loop();
-        void print( String);
-        void print( int i);
-        void println( String);
+        void print(String);
+        void print(const char*);
+        void print(int i);
+        void println(String);
+        void println(const char*);
+        void processCommand(String cmd);
 
     private:
+        String commandBuffer;
+        String lastCommand;  // Store last executed command for repeat functionality
 
 };
 
