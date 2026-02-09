@@ -1,6 +1,9 @@
 #pragma once
 #include <Adafruit_INA219.h>
 
+// Forward declaration
+class MD135;
+
 class Device {
 
     public:
@@ -16,10 +19,14 @@ class Device {
 
         void update_power();
         bool IsDown();
+        unsigned long _SampleTime = 0;
+        unsigned long _LastMillis = 0;
+        float GetAmps() { return _current_mA; };
+        int GetMinuteCount() { return _MinuteCount; };
+        MD135* motor; // Motor as pointer - initialized in setup()
+        Adafruit_INA219 ina219; // INA219 sensor - public for diagnostics
     private:
-        float _amps = 0.0;
         float _resistance = 0.0;
-        Adafruit_INA219 ina219;
         bool _Down = false;
         float _total_mA = 0.0;
         float _total_sec = 0.0;
@@ -30,7 +37,11 @@ class Device {
         float _loadvoltage = 0.0;
         float _power_mW = 0.0;
         float _total_mAH = 0.0;
-
+        bool _direction = true; // true for forward, false for reverse
+        unsigned int _MinuteCount = 0;
+        float _ReverseRatio = 0.1;
+        unsigned int _ReverseCount = 0;
+        unsigned long _last_power_update = 0;  // Track time between measurements
 };
 
 

@@ -3,7 +3,7 @@
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 
-#define RETRY_INTERVAL 3000
+#define RETRY_INTERVAL 5000  // 5 seconds between MQTT reconnection attempts
 
 using MessageHandler = void (*)(char *, char *);
 

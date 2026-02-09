@@ -10,8 +10,8 @@ void Mqtt::set_subscriptions(const char ** topics, int count) {
 void Mqtt::_subscribe_to_all() {
     if (_subscription_list) {
         for (int i=0; i<_sub_list_length; i++) {
-            telnet.print("\t.. subscribing to: ");
-            telnet.println(_subscription_list[i]);
+            //telnet.print("\t.. subscribing to: ");
+            //telnet.println(_subscription_list[i]);
             _mqtt_client.subscribe(_subscription_list[i]);
         }
     }

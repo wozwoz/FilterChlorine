@@ -9,7 +9,7 @@
 #include <ESPmDNS.h>
 
 // #define CLEAR_CREDS
-int Delay = 5000; // Main loop delay in ms
+int Delay = 1000; // Main loop delay in ms
 
 void setupOTA()
 {
@@ -70,19 +70,30 @@ void setup()
    // }
 
     // Connect WiFi
-    WiFi.mode(WIFI_STA);
     wifi_tools.log_events();
     wifi_tools.begin(ssid, pass);
 
     telnet.print("\tConnecting to WiFi");
-    while (WiFi.status() != WL_CONNECTED)
+    int connect_attempts = 0;
+    const int max_attempts = 40;  // 20 seconds total
+    while (WiFi.status() != WL_CONNECTED && connect_attempts < max_attempts)
     {
         delay(500);
         telnet.print(".");
+        connect_attempts++;
     }
-    telnet.println(" connected!");
-    telnet.println("\tIP Address: ");
-    telnet.println(String(WiFi.localIP()));
+    
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        telnet.println(" connected!");
+        telnet.print("\tIP Address: ");
+        telnet.println(String(WiFi.localIP()));
+    }
+    else
+    {
+        telnet.println(" timeout!");
+        telnet.println("\tWill continue trying in background...");
+    }
 
     // Setup services
     setupOTA();
@@ -96,22 +107,26 @@ void setup()
 
 void loop()
 {
-    if (millis() % Delay == 0)
+    // Handle telnet constantly to prevent disconnections
+    telnet.loop();
+    
+    static unsigned long lastLoop = 0;
+    if (millis() - lastLoop >= Delay)
     {
-        telnet.print(".");
+        lastLoop = millis();
+        //telnet.print(".");
 
         if (wifi_tools.is_connected)
         {
             ArduinoOTA.handle();
             mqtt.maintain();
             device.loop();
-            telnet.print("\r\n");
+            //telnet.print("\r\n");
         }
         else
         {
             wifi_tools.reconnect();
-            mqtt.report_disconnect();
+            // Don't force disconnect - maintain() will handle it
         }
-        telnet.loop();
     }
 }
