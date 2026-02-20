@@ -92,8 +92,7 @@ void Telnet::loop()
             telnetClient.setNoDelay(true);
             telnetClient.setTimeout(5000);  // 5 second timeout for operations
             
-            // Flush any telnet negotiation bytes sent by client
-            delay(50);  // Wait for any initial negotiation bytes
+            // Flush any telnet negotiation bytes (non-blocking)
             while (telnetClient.available())
             {
                 telnetClient.read();  // Discard telnet protocol bytes
@@ -187,8 +186,7 @@ void Telnet::processCommand(String cmd)
     // HELP - Display available commands (dynamically generated from command table)
     if (cmd == "help" || cmd == "?" || cmd == "h")
     {
-        telnetClient.println("Available commands:");
-        telnetClient.println("");
+        String output = "Available commands:\n\n";
         
         // Track current category to print headers
         String currentCategory = "";
@@ -205,37 +203,39 @@ void Telnet::processCommand(String cmd)
             // Print category header if changed
             if (currentCategory != category)
             {
-                if (i > 0) telnetClient.println("");  // Blank line between categories
-                telnetClient.print("  \033[1;36m");  // Cyan bold
-                telnetClient.print(category);
-                telnetClient.println(":\033[0m");    // Reset color
+                if (i > 0) output += "\n";  // Blank line between categories
+                output += "  \033[1;36m";  // Cyan bold
+                output += category;
+                output += ":\033[0m\n";    // Reset color
                 currentCategory = category;
             }
             
             // Format: "    command  (a) - description"
-            telnetClient.print("    ");
-            telnetClient.print(name);
+            output += "    ";
+            output += name;
             
             // Pad to align aliases and descriptions
             int padding = 12 - strlen(name);
-            for (int j = 0; j < padding; j++) telnetClient.print(" ");
+            for (int j = 0; j < padding; j++) output += " ";
             
             if (strlen(alias) > 0)
             {
-                telnetClient.print("(");
-                telnetClient.print(alias);
-                telnetClient.print(") ");
+                output += "(";
+                output += alias;
+                output += ") ";
             }
             else
             {
-                telnetClient.print("    ");
+                output += "    ";
             }
             
-            telnetClient.print("- ");
-            telnetClient.println(desc);
+            output += "- ";
+            output += desc;
+            output += "\n";
         }
         
-        telnetClient.println("");
+        output += "\n";
+        telnetClient.print(output);  // Send all at once
     }
     // STATUS - Show device information
     else if (cmd == "status" || cmd == "s")
@@ -344,6 +344,10 @@ void Telnet::processCommand(String cmd)
     // MOTOR STATUS - Display motor state
     else if (cmd == "motor")
     {
+        if (!device.motor) {
+            telnetClient.println("Error: Motor not initialized");
+            return;
+        }
         telnetClient.print("Motor status: ");
         if (device.motor->isRunning())
         {
@@ -360,24 +364,48 @@ void Telnet::processCommand(String cmd)
     // MOTOR FORWARD
     else if (cmd == "forward")
     {
-        device.motor->forward(200);
+        if (!device.motor) {
+            telnetClient.println("Error: Motor not initialized");
+            return;
+        }
+        device.motor->forward(255);
         telnetClient.println("Motor running forward at speed 200");
     }
     // MOTOR REVERSE
     else if (cmd == "reverse")
     {
-        device.motor->reverse(200);
+        Serial.println("[DEBUG] Reverse command received");
+        Serial.print("[DEBUG] Motor pointer: 0x");
+        Serial.println((unsigned long)device.motor, HEX);
+        
+        if (!device.motor) {
+            telnetClient.println("Error: Motor not initialized");
+            Serial.println("[DEBUG] Motor is NULL!");
+            return;
+        }
+        
+        Serial.println("[DEBUG] Calling motor->reverse(200)");
+        device.motor->reverse(255);
+        Serial.println("[DEBUG] motor->reverse() returned");
         telnetClient.println("Motor running reverse at speed 200");
     }
     // MOTOR STOP
     else if (cmd == "stop")
     {
+        if (!device.motor) {
+            telnetClient.println("Error: Motor not initialized");
+            return;
+        }
         device.motor->stop();
         telnetClient.println("Motor stopped");
     }
     // MOTOR MAX SPEED
     else if (cmd == "max")
     {
+        if (!device.motor) {
+            telnetClient.println("Error: Motor not initialized");
+            return;
+        }
         if (device.motor->isForward())
         {
             device.motor->forward(255);
@@ -392,6 +420,10 @@ void Telnet::processCommand(String cmd)
     // MOTOR CUSTOM SPEED - format: "speed 150" or "speed 255"
     else if (cmd.startsWith("speed "))
     {
+        if (!device.motor) {
+            telnetClient.println("Error: Motor not initialized");
+            return;
+        }
         int speed = cmd.substring(6).toInt();
         if (speed >= 0 && speed <= 255)
         {

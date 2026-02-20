@@ -7,44 +7,85 @@
 #include "telnet.h"
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
+#include <esp_task_wdt.h> // For watchdog control
 
 // #define CLEAR_CREDS
-int Delay = 1000; // Main loop delay in ms
+int Delay = 100; // Main loop delay in ms (faster for better OTA response)
+bool otaInProgress = false; // Flag to pause operations during OTA
 
 void setupOTA()
 {
     // Start mDNS for hostname resolution
-    if (!MDNS.begin("esp32-device"))
+    if (!MDNS.begin("filter-chlorine"))
     {
         telnet.println("\tError setting up mDNS");
     }
     else
     {
-        telnet.println("\tmDNS started: esp32-device.local");
+        telnet.println("\tmDNS started: filter-chlorine.local");
     }
 
-    ArduinoOTA.setHostname("ESP32-Device");
+    ArduinoOTA.setHostname("filter-chlorine");
     ArduinoOTA.setPassword("admin");
+    ArduinoOTA.setPort(3232);
 
     ArduinoOTA.onStart([]()
                        {
+        otaInProgress = true; // Pause other operations
+        mqtt.report_disconnect(); // Disconnect MQTT before OTA
+        
+        // Boost WiFi power for stable OTA transfer
+        WiFi.setTxPower(WIFI_POWER_19_5dBm);
+        
         String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-        telnet.print("\n\tOTA: Updating " + type); });
+        Serial.println("\n\tOTA: Updating " + type);
+        Serial.println("\tOTA: Disconnecting MQTT...");
+        Serial.printf("\tOTA: Free heap: %u bytes\n", ESP.getFreeHeap()); });
 
     ArduinoOTA.onEnd([]()
-                     { telnet.print("\n\tOTA: Complete"); });
+                     { 
+        otaInProgress = false;
+        Serial.println("\n\tOTA: Complete");
+        Serial.println("\tOTA: Rebooting..."); });
 
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
-                          { telnet.print("\tOTA Progress: " + String((progress / (total / 100))) + "%\r"); });
+                          { 
+        static unsigned long lastPrint = 0;
+        unsigned long now = millis();
+        if (now - lastPrint > 1000) {
+            Serial.printf("OTA Progress: %u%% (Heap: %u)\r", 
+                (progress / (total / 100)), 
+                ESP.getFreeHeap());
+            lastPrint = now;
+        }
+        yield(); // Allow WiFi stack to process packets
+    });
 
     ArduinoOTA.onError([](ota_error_t error)
                        {
-        telnet.print("\tOTA Error[ " + error);
-        if (error == OTA_AUTH_ERROR) telnet.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) telnet.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) telnet.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) telnet.println("Receive Failed");
-        else if (error == OTA_END_ERROR) telnet.println("End Failed"); });
+        otaInProgress = false; // Reset flag on error
+        Serial.print("\tOTA Error: ");
+        switch(error) {
+            case OTA_AUTH_ERROR: 
+                Serial.println("Auth Failed"); 
+                break;
+            case OTA_BEGIN_ERROR: 
+                Serial.println("Begin Failed - Check partition size"); 
+                break;
+            case OTA_CONNECT_ERROR: 
+                Serial.println("Connect Failed"); 
+                break;
+            case OTA_RECEIVE_ERROR: 
+                Serial.println("Receive Failed - Upload interrupted"); 
+                break;
+            case OTA_END_ERROR: 
+                Serial.println("End Failed - Verification error"); 
+                break;
+            default:
+                Serial.println("Unknown error");
+                break;
+        }
+    });
 
     ArduinoOTA.begin();
     telnet.println("\tOTA ready");
@@ -53,7 +94,7 @@ void setupOTA()
 void setup()
 {
     Serial.begin(115200);
-    telnet.println("\n\tChorinator Starting...\n");
+    Serial.println("\n\tChorinator Starting...\n");
 
     // Handle credentials
     char ssid[32] = {WIFI_SSID};
@@ -73,26 +114,26 @@ void setup()
     wifi_tools.log_events();
     wifi_tools.begin(ssid, pass);
 
-    telnet.print("\tConnecting to WiFi");
+    Serial.print("\tConnecting to WiFi");
     int connect_attempts = 0;
     const int max_attempts = 40;  // 20 seconds total
     while (WiFi.status() != WL_CONNECTED && connect_attempts < max_attempts)
     {
         delay(500);
-        telnet.print(".");
+        Serial.print(".");
         connect_attempts++;
     }
     
     if (WiFi.status() == WL_CONNECTED)
     {
-        telnet.println(" connected!");
-        telnet.print("\tIP Address: ");
-        telnet.println(String(WiFi.localIP()));
+        Serial.println(" connected!");
+        Serial.print("\tIP Address: ");
+        Serial.println(WiFi.localIP());
     }
     else
     {
-        telnet.println(" timeout!");
-        telnet.println("\tWill continue trying in background...");
+        Serial.println(" timeout!");
+        Serial.println("\tWill continue trying in background...");
     }
 
     // Setup services
@@ -100,13 +141,24 @@ void setup()
 
     mqtt.setup(MQTT_HOST, mqtt_user, mqtt_password, MQTT_PORT);
     device.setup();
-    telnet.setup();
+    telnet.setup();  // Initialize telnet server after WiFi is connected
 
-    telnet.println("\tSetup complete\n");
+    Serial.println("\tSetup complete\n");
+    telnet.println("\tSetup complete - Telnet ready\n");
 }
 
 void loop()
 {
+    // OTA has highest priority - dedicated fast loop during upload
+    if (otaInProgress) {
+        ArduinoOTA.handle();
+        yield(); // Allow ESP32 to handle background tasks
+        return;
+    }
+    
+    // Always handle OTA with high priority
+    ArduinoOTA.handle();
+    
     // Handle telnet constantly to prevent disconnections
     telnet.loop();
     
@@ -118,7 +170,6 @@ void loop()
 
         if (wifi_tools.is_connected)
         {
-            ArduinoOTA.handle();
             mqtt.maintain();
             device.loop();
             //telnet.print("\r\n");

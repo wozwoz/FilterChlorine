@@ -14,7 +14,7 @@
 Device::Device() : motor(nullptr) {}
 
 Device device;
-
+#define CurrentCalibrationFactor 18.150 // Adjust this factor based on calibration results
 const int sensorIn = 34; // pin where the OUT pin from sensor is connected on Arduino
 
 // Define static member variables
@@ -42,16 +42,28 @@ void Device::setup()
        //this->ina219.setCalibration_32V_2A();
         telnet.println("INA219 initialized and calibrated (16V/400mA)");
     }
-    // Initialize motor: PWM pin 25, DIR pin 26, channel 0, 5kHz, 8-bit
+    // Initialize motor: PWM pin 26, DIR pin 25, channel 0, 5kHz, 8-bit
     motor = new MD135(26, 25, 0, 5000, 8);
-    motor->begin();
-    motor->reverse(255); // Start in reverse to prevent fouling of sensor on startup
+    if (!motor) {
+        telnet.println("CRITICAL: Failed to allocate motor object!");
+        Serial.println("CRITICAL: Failed to allocate motor object!");
+    } else {
+        motor->begin();
+        motor->forward(255); // Start in forward - will auto-reverse after 10 minutes
+        telnet.println("Motor initialized successfully (forward mode)");
+    }
     
     _last_power_update = millis();  // Initialize power measurement timer
 }
 
 void Device::loop()
 {
+    // Check if motor is initialized
+    if (!motor) {
+        telnet.println("Error: Motor not initialized, skipping device loop");
+        return;
+    }
+    
     // Generate sensor data
     // Generate sensor data
     if(millis() < _LastMillis) {
@@ -61,23 +73,23 @@ void Device::loop()
     
     _LastMillis = millis() + _SampleTime;
     _MinuteCount++;
-    // this should run for multiples of 1 minute, then reverse for 6 seconds, then return to forward 
-    //  - this is to prevent fouling of the chlorine sensor by keeping water moving in both directions over time
-    if((float) _MinuteCount*_ReverseRatio >= 1.00) {
-        motor->reverse(255); // Run motor in reverse at speed 200 (0-255)
-        _ReverseCount++;
-        _MinuteCount = 0;
-
-
-    } 
     
-    if(_MinuteCount >= 1 && !motor->isForward() ) { //reset to forward after reverse duration has passed
-        motor->forward(255); // Run motor forward at speed 200 (0-255)
-        _MinuteCount = 0;
-
-    }  
-
-    _direction = !_direction; // Toggle direction for next loop 
+    // Motor control: Run forward for 10 minutes, then reverse for 1 minute, repeat
+    // _ReverseRatio = 0.1 means reverse 1 out of every 10 minutes
+    if(motor->isForward()) {
+        // Currently running forward - check if it's time to reverse
+        if((float) _MinuteCount * _ReverseRatio >= 1.00) {
+            motor->reverse(255);
+            _ReverseCount++;
+            _MinuteCount = 0;
+        }
+    } else {
+        // Currently running reverse - check if it's time to go back to forward
+        if(_MinuteCount >= 1) {
+            motor->forward(255);
+            _MinuteCount = 0;
+        }
+    }
 
     int rssi = WiFi.RSSI(); // Get WiFi signal strength
 
@@ -88,6 +100,8 @@ void Device::loop()
     doc["resistance"] = _resistance;
     doc["current"] = _current_mA;
     doc["rssi"] = rssi;
+    doc["direction"] = motor->isForward() ? "forward" : "reverse";
+    doc["ip"] = WiFi.localIP().toString();
     doc["uptime"] = millis() / 1000;
     doc["down"] = IsDown() ? "offline" : "online";
     doc["busvoltage"] = _busvoltage;
@@ -102,7 +116,7 @@ void Device::loop()
     // Publish JSON to single topic
     mqtt.publish("filterchlorine/sensors", jsonBuffer);
 
-    delay(2000);
+    // Removed blocking delay(2000) - was killing WiFi performance
     if (payloadReady)
     {
         telnet.print("\tprocessed payload: ");
@@ -153,16 +167,7 @@ void Device::update_power()
     // Read voltage and current from INA219
     _shuntvoltage = this->ina219.getShuntVoltage_mV();
     _busvoltage = this->ina219.getBusVoltage_V();
-    _current_mA = this->ina219.getCurrent_mA();
-    
-    // Debug: print immediately after reading
-    telnet.print("[RAW] Bus: ");
-    telnet.print(_busvoltage);
-    telnet.print("V, Shunt: ");
-    telnet.print(_shuntvoltage);
-    telnet.print("mV, Current: ");
-    telnet.print(_current_mA);
-    telnet.println("mA");
+    _current_mA = this->ina219.getCurrent_mA() * CurrentCalibrationFactor; // Apply calibration factor if needed
 
     // Compute load voltage and power
     _loadvoltage = _busvoltage + (_shuntvoltage / 1000);

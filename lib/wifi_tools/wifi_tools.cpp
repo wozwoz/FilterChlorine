@@ -12,16 +12,21 @@ void WiFi_Tools::begin(const char * ssid, const char * pass) {
 	strncpy(_password, pass, sizeof(_password) - 1);
 	_password[sizeof(_password) - 1] = '\0';
 	
-	WiFi.disconnect(true);  // Clear any previous connection state
+	WiFi.disconnect(true);
 	delay(100);
 	WiFi.mode(WIFI_STA);
-	WiFi.setAutoReconnect(false);
-	WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Max power for better stability
-	WiFi.setSleep(false);  // Disable WiFi sleep for stable connection
+	
+	// Using DHCP - static IP was causing MISSING_ACKS
+	// Set DHCP reservation in router for consistent IP
+	
+	WiFi.setSleep(WIFI_PS_NONE);
 	WiFi.persistent(false);
 	WiFi.onEvent(_event_handler);
 	WiFi.begin(ssid, pass);
-	Serial.println("WiFi connecting...");
+	
+	Serial.println("WiFi connecting with DHCP...");
+
+	//.Serial.println("WiFi connecting with static IP 192.168.1.200 (testing)...");
 }
 
 void WiFi_Tools::reconnect() {
