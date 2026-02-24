@@ -2,20 +2,23 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <Adafruit_INA219.h>
+#include <Adafruit_NeoPixel.h>
 #include <ArduinoJson.h>
 #include "device.h"
 
 #include "../telnet/telnet.h"
 #include "ACS712.h"
-#define On_Board_LED_PIN 2
+#define On_Board_LED_PIN 38
+#define RGB_LED_PIN 48
+#define NUM_PIXELS 1
 #define SampleTime 5000
 #include "motor.h"
 
-Device::Device() : motor(nullptr) {}
+Device::Device() : motor(nullptr), pixel(nullptr) {}
 
 Device device;
 #define CurrentCalibrationFactor 18.150 // Adjust this factor based on calibration results
-const int sensorIn = 34; // pin where the OUT pin from sensor is connected on Arduino
+const int sensorIn = 4; // pin where the OUT pin from sensor is connected on ESP32-S3 (ADC1)
 
 // Define static member variables
 bool Device::payloadReady = false;
@@ -28,9 +31,25 @@ void Device::setup()
     mqtt.set_subscriptions(subscription_list, 1);
     mqtt.set_callback(message_handler);
     _SampleTime = 60*1000; // 1 minute default sample time
+    _LastSampleTime = millis();
+    
+    // Initialize NeoPixel RGB LED
+    pixel = new Adafruit_NeoPixel(NUM_PIXELS, RGB_LED_PIN, NEO_GRB + NEO_KHZ800);
+    if (pixel) {
+        pixel->begin();
+        pixel->setBrightness(20); // Low brightness to avoid blinding
+        pixel->setPixelColor(0, pixel->Color(0, 255, 0)); // Start green
+        pixel->show();
+        telnet.println("NeoPixel initialized (GPIO 48)");
+    }
+    
     // Publish initial status
     mqtt.publish("filterchlorine/status", "online");
     mqtt.publish("filterchlorine/ota/state", "ready");
+    
+    // Initialize I2C with custom pins: SDA = GPIO 8, SCL = GPIO 9
+    Wire.begin(9, 8);
+    
     if (!this->ina219.begin())
     {
         telnet.println("Failed to find INA219 chip mark as down");
@@ -43,7 +62,7 @@ void Device::setup()
         telnet.println("INA219 initialized and calibrated (16V/400mA)");
     }
     // Initialize motor: PWM pin 26, DIR pin 25, channel 0, 5kHz, 8-bit
-    motor = new MD135(26, 25, 0, 5000, 8);
+    motor = new MD135(35, 36, 0, 5000, 8);
     if (!motor) {
         telnet.println("CRITICAL: Failed to allocate motor object!");
         Serial.println("CRITICAL: Failed to allocate motor object!");
@@ -58,6 +77,9 @@ void Device::setup()
 
 void Device::loop()
 {
+    // Update LED color gradient continuously
+    updateLED();
+    
     // Check if motor is initialized
     if (!motor) {
         telnet.println("Error: Motor not initialized, skipping device loop");
@@ -72,6 +94,7 @@ void Device::loop()
     }
     
     _LastMillis = millis() + _SampleTime;
+    _LastSampleTime = millis(); // Record when sample was taken
     _MinuteCount++;
     
     // Motor control: Run forward for 10 minutes, then reverse for 1 minute, repeat
@@ -123,6 +146,26 @@ void Device::loop()
         telnet.println(globalBuf);
         payloadReady = false;
     }
+}
+
+void Device::updateLED()
+{
+    if (!pixel) return;
+    
+    // Calculate elapsed time since last sample
+    unsigned long elapsed = millis() - _LastSampleTime;
+    
+    // Calculate ratio (0.0 = just sampled/green, 1.0 = about to sample/red)
+    float ratio = (float)elapsed / (float)_SampleTime;
+    if (ratio > 1.0) ratio = 1.0;
+    
+    // Interpolate color from green to red
+    // Green: (0, 255, 0) -> Red: (255, 0, 0)
+    uint8_t red = (uint8_t)(ratio * 255);
+    uint8_t green = (uint8_t)((1.0 - ratio) * 255);
+    
+    pixel->setPixelColor(0, pixel->Color(red, green, 0));
+    pixel->show();
 }
 
 void Device::message_handler(char *topic, char *payload)

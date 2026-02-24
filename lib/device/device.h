@@ -3,6 +3,7 @@
 
 // Forward declaration
 class MD135;
+class Adafruit_NeoPixel;
 
 class Device {
 
@@ -18,13 +19,16 @@ class Device {
         void CalculateData();
 
         void update_power();
+        void updateLED();
         bool IsDown();
         unsigned long _SampleTime = 0;
         unsigned long _LastMillis = 0;
+        unsigned long _LastSampleTime = 0;
         float GetAmps() { return _current_mA; };
         int GetMinuteCount() { return _MinuteCount; };
         MD135* motor; // Motor as pointer - initialized in setup()
         Adafruit_INA219 ina219; // INA219 sensor - public for diagnostics
+        Adafruit_NeoPixel* pixel; // NeoPixel RGB LED
     private:
         float _resistance = 0.0;
         bool _Down = false;
